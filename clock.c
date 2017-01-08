@@ -108,12 +108,14 @@ int writeValue (uint16_t value1, uint16_t value2)
 
 void setHour(uint8_t hour, uint8_t inner, uint8_t value)
 {
-	
-	if (hour != 0)
+	hour = (hour + 11) % 12;
+
+
+	/*if (hour != 0)
 	{
 		if (hour > 12) hour = hour - 12;
 		hour = 12 - hour;
-	}
+	}*/
 
 	//                          00 01 02 03 04 05 06 07  08 09 10 11  12 13 14 15 16 17 18 19 20 21 22 23   
 	uint8_t slotMapping1[24] = { 0, 0, 0, 0, 0, 0, 0, 0,  4, 4, 4, 4,  1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 4 };
@@ -137,6 +139,8 @@ void setHour(uint8_t hour, uint8_t inner, uint8_t value)
 		led = ledMapping2[hour];
 	}
 
+	
+
 	//printf("%2i -> %2i %2i\n", hour, slot, led);
 
 
@@ -149,9 +153,11 @@ void setHour(uint8_t hour, uint8_t inner, uint8_t value)
 		hours[slot] &= ~(1 << led);
 	}
 
-
 	
-
+	
+	// 0 ==> innen
+	// 4 ==> mitte
+	// 6 ==> auﬂen
 
 }
 
@@ -269,19 +275,19 @@ void clearAll()
 	}
 
 	
-	setHour(0, 1, 1);
-	setHour(1, 1, 1);
-	setHour(2, 1, 1);
-	setHour(3, 1, 1);
-	setHour(4, 1, 1);
-	setHour(5, 1, 1);
-	setHour(6, 1, 1);
-	setHour(7, 1, 1);
-	setHour(8, 1, 1);
-	setHour(9, 1, 1);
-	setHour(10, 1, 1);
-	setHour(11, 1, 1);
-
+	setHour(0, 0, 1);
+	//setHour(1, 1, 1);
+	//setHour(2, 1, 1);
+	setHour(3, 0, 1);
+	//setHour(4, 1, 1);
+	//setHour(5, 1, 1);
+	setHour(6, 0, 1);
+	//setHour(7, 1, 1);
+	//setHour(8, 1, 1);
+	setHour(9, 0, 1);
+	//setHour(10, 1, 1);
+	//setHour(11, 1, 1);
+	
 	
 
 	transferBuffer();
@@ -410,14 +416,58 @@ int main(int argc, char *argv[])
 	clearAll();
 	
 
-	writeValue(0x0F00, 0x0F00);  //Testmode aus
+	
 	writeValue(0x0900, 0x0900);  //No Decode
-	writeValue(0x0A00, 0x0A05);  //Full Power!
+	writeValue(0x0A01, 0x0A01);  //Full Power!
 	writeValue(0x0B07, 0x0B07);  //Alle Digits
 	writeValue(0x0C01, 0x0C01);  //Normal mode
 
 
+	writeValue(0x0F00, 0x0F00);  //Testmode aus
+
 	
+	clearAll();
+	
+	setMinute(0, 1);
+	setMinute(15, 1);
+	setMinute(30, 1);
+	setMinute(45, 1);
+
+	setHour(0, 1, 1);
+	setHour(3, 1, 1);
+	setHour(6, 1, 1);
+	setHour(9, 1, 1);
+
+	setHour(0, 0, 1);
+	setHour(3, 0, 1);
+	setHour(6, 0, 1);
+	setHour(9, 0, 1);
+
+
+	transferBuffer();
+
+	delay(1000);
+
+	clearAll();
+
+	int ohour = -1;
+	for (int j = 0; j < 12; j++)
+	{
+		if (ohour > -1)
+		{
+			setHour(ohour, 0, 0); 
+			setHour(ohour, 1, 0);
+		}
+		setHour(j, 0, 1);
+		setHour(j, 1, 1);
+		ohour = j;
+		
+		transferBuffer();
+		delay(1000);
+	}
+
+	delay(1000);
+	clearAll();
 
 	int omin = -1;
 	int i = 0;
@@ -428,7 +478,7 @@ int main(int argc, char *argv[])
 		omin = i;
 		setHour(i / 5, 0, 1);
 		transferBuffer();
-		delay(10);
+		delay(100);
 	}
 	clearAll();
 
@@ -458,12 +508,12 @@ int main(int argc, char *argv[])
 
 			//clearAll();
 			if (oldMinute >= 0) setMinute(oldMinute, 0);
-			if (oldHour >= 0) setHour(oldHour, 0, 0);
+			if (oldHour >= 0) setHour(oldHour, 1, 0);
 			if (oldSec >= 0) setMinute(oldSec, 0);
 
 			setMinute(min, 1);
 			setMinute(sec, 1);
-			setHour(hour, 0, 1);
+			setHour(hour, 1, 1);
 			oldMinute = min;
 			oldHour = hour;
 			oldSec = sec;
@@ -543,7 +593,7 @@ int main(int argc, char *argv[])
 
 			
 		}
-		delay(10);
+		delay(20);
 
 		
 
