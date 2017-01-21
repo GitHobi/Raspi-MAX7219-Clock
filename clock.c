@@ -23,9 +23,10 @@
 #include <math.h>
 #include <stdio.h>
 
-
+#include <sys/resource.h>
 
 #include "config.h"
+#include "sun.h"
 
 #include <wiringPi.h>
 
@@ -34,7 +35,10 @@ static volatile int keepRunning = 1;
 static volatile int verbose = 0;
 static volatile int foreground = 0;
 
-
+#define DAYPOWER 10
+#define NIGHTPOWER 2
+#define PRIORITY -20
+#define TRANMISSIONDELAY 10
 
 
 
@@ -42,6 +46,7 @@ static volatile int foreground = 0;
 uint8_t minutes[8];
 uint8_t hours[8];
 
+int transmissionDelay = 100;
 
 /*
  *
@@ -81,6 +86,7 @@ int _writeValue(uint16_t value)
 		value <<= 1;
 
 		digitalWrite(CLOCK_CLK, 1);
+		if (transmissionDelay > 0) delayMicroseconds(transmissionDelay);
 	}
 
 	return 1;
@@ -95,7 +101,7 @@ int writeValue (uint16_t value1, uint16_t value2)
 	
 	
 	digitalWrite(CLOCK_LOAD, 1);
-	//delay(1);
+	if (transmissionDelay > 0) delayMicroseconds(transmissionDelay);
 	digitalWrite(CLOCK_LOAD, 0);
 	
 	//printf("\n");
@@ -320,6 +326,26 @@ void intHandler(int dummy)
 }
 
 
+void setPrio()
+{
+	int which = PRIO_PROCESS;
+	id_t pid;
+	
+
+	pid = getpid();
+	
+
+	char str[200];
+	sprintf(str, "my PID=%i", pid);
+	syslog(LOG_NOTICE, str);
+
+
+	sprintf(str, "Setting priority=%i", PRIORITY);
+	syslog(LOG_NOTICE, str);
+	setpriority(which, pid, PRIORITY);
+
+}
+
 static void skeleton_daemon()
 {
 	pid_t pid;
@@ -370,6 +396,15 @@ static void skeleton_daemon()
 	}
 }
 
+void configureDevice()
+{
+	writeValue(0x0900, 0x0900);  //No Decode
+	writeValue(0x0A00 + DAYPOWER, 0x0A00 + DAYPOWER);  //Full Power!
+	writeValue(0x0B07, 0x0B07);  //Alle Digits
+	writeValue(0x0C01, 0x0C01);  //Normal mode
+
+	writeValue(0x0F00, 0x0F00);  //Testmode aus
+}
 
 
 int main(int argc, char *argv[])
@@ -395,9 +430,11 @@ int main(int argc, char *argv[])
 
 	if (foreground == 0)
 	{
-		printf("daemonzing ...\n");
+		//printf("daemonzing ...\n");
 		skeleton_daemon();
 	}
+
+	setPrio();
 
 	/* Open the log file */
 	openlog("clock", LOG_PID, LOG_DAEMON);
@@ -415,55 +452,60 @@ int main(int argc, char *argv[])
 
 	clearAll();
 	
+	if (isDay())
+	{
+		syslog(LOG_NOTICE, "Started during day-time!");
+	}
+	else
+	{
+		syslog(LOG_NOTICE, "Started during night-time!");
+	}
 
 	
-	writeValue(0x0900, 0x0900);  //No Decode
-	writeValue(0x0A01, 0x0A01);  //Full Power!
-	writeValue(0x0B07, 0x0B07);  //Alle Digits
-	writeValue(0x0C01, 0x0C01);  //Normal mode
-
-
-	writeValue(0x0F00, 0x0F00);  //Testmode aus
-
+	syslog(LOG_NOTICE, "Configuring output devices ...");
+	configureDevice();
 	
-	clearAll();
 	
-	setMinute(0, 1);
-	setMinute(15, 1);
-	setMinute(30, 1);
-	setMinute(45, 1);
+	//setMinute(0, 1);
+	//setMinute(15, 1);
+	//setMinute(30, 1);
+	//setMinute(45, 1);
 
-	setHour(0, 1, 1);
-	setHour(3, 1, 1);
-	setHour(6, 1, 1);
-	setHour(9, 1, 1);
+	//setHour(0, 1, 1);
+	//setHour(3, 1, 1);
+	//setHour(6, 1, 1);
+	//setHour(9, 1, 1);
 
-	setHour(0, 0, 1);
-	setHour(3, 0, 1);
-	setHour(6, 0, 1);
-	setHour(9, 0, 1);
+	//setHour(0, 0, 1);
+	//setHour(3, 0, 1);
+	//setHour(6, 0, 1);
+	//setHour(9, 0, 1);
 
 
-	transferBuffer();
+	//transferBuffer();
 
-	delay(1000);
+	//delay(1000);
 
-	clearAll();
+	//clearAll();
 
-	int ohour = -1;
-	for (int j = 0; j < 12; j++)
+	/*int ohour = -1;
+	int d = 200;
+	for (int j = 0; j < 25; j++)
 	{
 		if (ohour > -1)
 		{
 			setHour(ohour, 0, 0); 
 			setHour(ohour, 1, 0);
+			setMinute(ohour * 5, 0);
 		}
 		setHour(j, 0, 1);
 		setHour(j, 1, 1);
+		setMinute(j*5, 1);
 		ohour = j;
 		
+
 		transferBuffer();
-		delay(1000);
+		delay(d);
 	}
 
 	delay(1000);
@@ -481,13 +523,15 @@ int main(int argc, char *argv[])
 		delay(100);
 	}
 	clearAll();
-
+	delay(1000);*/
 
 	//uint8_t min = 0;
+	int oldIsDay = -1;
+	int oldHour = -1;
+	int oldMinute = -1;
+	int oldSec = -1;
 
-	uint8_t oldHour = -1;
-	uint8_t oldMinute = -1;
-	uint8_t oldSec = -1;
+	transmissionDelay = TRANMISSIONDELAY;
 
 	//long int o = 0;
 	while (keepRunning)
@@ -505,20 +549,67 @@ int main(int argc, char *argv[])
 		
 		if ((oldMinute != min) || (oldHour != hour) || (oldSec != sec))
 		{
+			if (oldMinute != min)
+			{
+				syslog(LOG_DEBUG, "Still alive!");
+
+				configureDevice();
+				clearAll();
+			}
+
 
 			//clearAll();
 			if (oldMinute >= 0) setMinute(oldMinute, 0);
-			if (oldHour >= 0) setHour(oldHour, 1, 0);
+			if (oldHour >= 0)
+			{
+				if ((oldHour != 0) && (oldHour != 3) && (oldHour != 6) && (oldHour != 9))
+				{
+					setHour(oldHour, 1, 0);
+					setHour(oldHour, 0, 0);
+				}
+				else
+				{
+					setHour(oldHour, 1, 0);
+				}
+
+				setHour(0, 0, 1);
+				setHour(3, 0, 1);
+				setHour(6, 0, 1);
+				setHour(9, 0, 1);
+			}
 			if (oldSec >= 0) setMinute(oldSec, 0);
 
 			setMinute(min, 1);
 			setMinute(sec, 1);
 			setHour(hour, 1, 1);
+			setHour(hour, 0, 1);
+
+			if (oldMinute != min)
+			{
+				int isCurrentlyDay = isDay();
+
+				if (isCurrentlyDay != oldIsDay)
+				{
+					if (isCurrentlyDay)
+					{
+						writeValue(0x0A00 + DAYPOWER, 0x0A00 + DAYPOWER);  //Full Power!
+					}
+					else
+					{
+						writeValue(0x0A00 + NIGHTPOWER, 0x0A00 + NIGHTPOWER);  //Full Power!
+					}
+
+					oldIsDay = isCurrentlyDay;
+				}
+			}
+
+
 			oldMinute = min;
 			oldHour = hour;
 			oldSec = sec;
 
 			transferBuffer();
+			delay(500);
 			
 
 			{
@@ -547,7 +638,7 @@ int main(int argc, char *argv[])
 
 				//o = tv.tv_sec * 1000000 + tv.tv_usec;
 
-				int usectotal = 950*1000;
+				int usectotal = 450*1000;
 				//int a = 0;
 				int om = -1;
 				int ov = 0;

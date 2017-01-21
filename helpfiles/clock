@@ -1,0 +1,73 @@
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:          ledclock
+# Required-Start:    
+# Required-Stop:     
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Should-Start:      
+# Should-Stop:      
+# Short-Description: start led clock
+### END INIT INFO
+
+PIDDIR=/var/run
+SMBDPID=$PIDDIR/ledclock.pid
+
+# clear conflicting settings from the environment
+unset TMPDIR
+
+# See if the daemons are there
+test -x /home/pi/rfm12/clock1/clock || exit 0
+#ln -s /dev/null /lib/systemd/system/clock.service
+#. /lib/lsb/init-functions
+case $1 in
+	start)
+
+		#log_daemon_msg "Starting LED Clock daemon" clock
+		# Make sure we have our PIDDIR, even if it's on a tmpfs
+		install -o root -g root -m 755 -d $PIDDIR
+
+		if ! start-stop-daemon --start --quiet --oknodo --pidfile $SMBDPID --exec /home/pi/rfm12/clock1/clock; then
+		#	log_end_msg 1
+			exit 1
+		fi
+
+#		log_end_msg 0
+		;;
+	stop)
+
+		#log_daemon_msg "Stopping LED Clock daemon" clock
+
+		start-stop-daemon --stop --quiet --exec /home/pi/rfm12/clock1/clock
+		# Wait a little and remove stale PID file
+		sleep 1
+		if [ -f $SMBDPID ] && ! ps h `cat $SMBDPID` > /dev/null
+		then
+			# Stale PID file, remove it (should be removed by
+			# smbd itself IMHO).
+			rm -f $SMBDPID
+		fi
+
+		#log_end_msg 0
+
+		;;
+	restart|force-reload)
+		#if init_is_upstart; then
+		#	exit 1
+		#fi
+		$0 stop
+		sleep 1
+		$0 start
+		;;
+        status)
+		status_of_proc -p $SMBDPID /home/pi/rfm12/clock1/clock clock
+		exit $?
+		;;
+	*)
+		echo "Usage: $0 {start|stop|reload|restart|force-reload|status}"
+		exit 1
+		;;
+esac
+
+exit 0
